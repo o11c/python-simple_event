@@ -14,18 +14,29 @@
 
 import select
 
+def fileno(fd):
+    ''' While select.select() preserves actual socket objects passed,
+        select.poll and select.epoll will always return the integer.
+
+        This is used to turn an integer or socket into an integer,
+        to be used in a map key.
+    '''
+    if isinstance(fd, int):
+        return fd
+    return fd.fileno()
+
 SelectImpl = None
 PollImpl = None
 
 class EpollImpl:
-    __slots__ = ('_impl', '_count')
+    __slots__ = ('_impl', '_map')
 
     def __init__(self):
         self._impl = select.epoll()
-        self._count = 0
+        self._map = {}
 
     def __bool__(self):
-        return self._count != 0
+        return bool(self._map)
 
     def on_read(self, fd, also_write):
         ''' Be interested in readability of this fd.
@@ -34,7 +45,7 @@ class EpollImpl:
             self._impl.modify(fd, select.EPOLLIN | select.EPOLLOUT)
         else:
             self._impl.register(fd, select.EPOLLIN)
-            self._count += 1
+            self._map[fileno(fd)] = fd
 
     def on_write(self, fd, also_read):
         ''' Be interested in writability of this fd.
@@ -43,7 +54,7 @@ class EpollImpl:
             self._impl.modify(fd, select.EPOLLIN | select.EPOLLOUT)
         else:
             self._impl.register(fd, select.EPOLLOUT)
-            self._count += 1
+            self._map[fileno(fd)] = fd
 
     def off_read(self, fd, still_write):
         ''' Be disinterested in readability of this fd.
@@ -52,7 +63,7 @@ class EpollImpl:
             self._impl.modify(fd, select.EPOLLOUT)
         else:
             self._impl.unregister(fd)
-            self._count -= 1
+            del self._map[fileno(fd)]
 
     def off_write(self, fd, still_read):
         ''' Be disinterested in readability of this fd.
@@ -61,7 +72,7 @@ class EpollImpl:
             self._impl.modify(fd, select.EPOLLIN)
         else:
             self._impl.unregister(fd)
-            self._count -= 1
+            del self._map[fileno(fd)]
 
     def check(self, timeout):
         ''' return a tuple (r, w) of sets of fds ready for IO.
@@ -74,6 +85,7 @@ class EpollImpl:
         r = set()
         w = set()
         for fd, events in result:
+            fd = self._map[fd]
             if events & select.EPOLLIN:
                 r.add(fd)
             if events & select.EPOLLOUT:

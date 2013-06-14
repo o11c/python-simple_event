@@ -3,6 +3,7 @@ import unittest
 import datetime
 import os
 import random
+import socket
 
 from simple_event.event_set import EventSet
 from simple_event import constants
@@ -50,7 +51,7 @@ class TestEventSet(unittest.TestCase):
         evs = EventSet()
         evs.run_forever()
 
-    def test_read(self):
+    def test_read_fd(self):
         evs = EventSet()
         r, w = os.pipe()
         data = b'Test message for reading.\n\0\x86Random garbage.'
@@ -64,7 +65,7 @@ class TestEventSet(unittest.TestCase):
         evs.on_readable(r, callback)
         evs.run_forever()
 
-    def test_write(self):
+    def test_write_fd(self):
         evs = EventSet()
         r, w = os.pipe()
         data = b'Test message for writing.\n\0\x86Random garbage.'
@@ -76,6 +77,29 @@ class TestEventSet(unittest.TestCase):
         evs.run_forever()
         assert os.read(r, constants.BUFFER_SIZE) == data
         os.close(r)
+
+    def test_read_socket(self):
+        evs = EventSet()
+        r, w = socket.socketpair()
+        data = b'Test message for reading.\n\0\x86Random garbage.'
+        assert w.send(data) == len(data)
+
+        def callback(evs, rfd):
+            assert rfd.recv(constants.BUFFER_SIZE) == data
+            return constants.CALLBACK_REMOVE
+        evs.on_readable(r, callback)
+        evs.run_forever()
+
+    def test_write_socket(self):
+        evs = EventSet()
+        r, w = socket.socketpair()
+        data = b'Test message for writing.\n\0\x86Random garbage.'
+        def callback(evs, wfd):
+            assert wfd.send(data) == len(data)
+            return constants.CALLBACK_REMOVE
+        evs.on_writable(w, callback)
+        evs.run_forever()
+        assert r.recv(constants.BUFFER_SIZE) == data
 
 if __name__ == '__main__':
     unittest.main()
