@@ -56,11 +56,9 @@ class TestEventSet(unittest.TestCase):
         r, w = os.pipe()
         data = b'Test message for reading.\n\0\x86Random garbage.'
         assert os.write(w, data) == len(data)
-        os.close(w)
 
         def callback(evs, rfd):
             assert os.read(rfd, constants.BUFFER_SIZE) == data
-            os.close(rfd)
             return constants.CALLBACK_REMOVE
         evs.on_readable(r, callback)
         evs.run_forever()
@@ -71,21 +69,22 @@ class TestEventSet(unittest.TestCase):
         data = b'Test message for writing.\n\0\x86Random garbage.'
         def callback(evs, wfd):
             assert os.write(wfd, data) == len(data)
-            os.close(wfd)
             return constants.CALLBACK_REMOVE
         evs.on_writable(w, callback)
         evs.run_forever()
         assert os.read(r, constants.BUFFER_SIZE) == data
-        os.close(r)
 
     def test_read_socket(self):
         evs = EventSet()
         r, w = socket.socketpair()
         data = b'Test message for reading.\n\0\x86Random garbage.'
-        assert w.send(data) == len(data)
+        n = w.send(data)
+        assert n == len(data)
+        w.close() # never passed off to the EvS
 
         def callback(evs, rfd):
-            assert rfd.recv(constants.BUFFER_SIZE) == data
+            buf = rfd.recv(constants.BUFFER_SIZE)
+            assert buf == data
             return constants.CALLBACK_REMOVE
         evs.on_readable(r, callback)
         evs.run_forever()
@@ -95,11 +94,14 @@ class TestEventSet(unittest.TestCase):
         r, w = socket.socketpair()
         data = b'Test message for writing.\n\0\x86Random garbage.'
         def callback(evs, wfd):
-            assert wfd.send(data) == len(data)
+            n = wfd.send(data)
+            assert n == len(data)
             return constants.CALLBACK_REMOVE
         evs.on_writable(w, callback)
         evs.run_forever()
-        assert r.recv(constants.BUFFER_SIZE) == data
+        buf = r.recv(constants.BUFFER_SIZE)
+        assert buf == data
+        r.close() # never passed off to the EvS
 
 if __name__ == '__main__':
     unittest.main()

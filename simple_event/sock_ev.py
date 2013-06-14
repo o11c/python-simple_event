@@ -12,6 +12,7 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+import os
 import select
 
 def fileno(fd):
@@ -24,6 +25,12 @@ def fileno(fd):
     if isinstance(fd, int):
         return fd
     return fd.fileno()
+
+def close(fd):
+    if isinstance(fd, int):
+        os.close(fd)
+    else:
+        fd.close()
 
 SelectImpl = None
 PollImpl = None
@@ -64,6 +71,7 @@ class EpollImpl:
         else:
             self._impl.unregister(fd)
             del self._map[fileno(fd)]
+            close(fd)
 
     def off_write(self, fd, still_read):
         ''' Be disinterested in readability of this fd.
@@ -73,6 +81,7 @@ class EpollImpl:
         else:
             self._impl.unregister(fd)
             del self._map[fileno(fd)]
+            close(fd)
 
     def check(self, timeout):
         ''' return a tuple (r, w) of sets of fds ready for IO.
